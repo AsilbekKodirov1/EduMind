@@ -1,0 +1,347 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  MULTIPLE_SELECT
+  TRUE_FALSE
+  FILL_BLANK
+  SHORT_ANSWER
+  MATCHING
+  ORDERING
+}
+
+enum AssessmentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+}
+
+enum MasteryStatus {
+  NEEDS_REVISION
+  DEVELOPING
+  MASTERED
+}
+
+model School {
+  id        String    @id @default(cuid())
+  name      String
+  createdAt DateTime  @default(now())
+  users     User[]
+  classes   Class[]
+  subjects  Subject[]
+}
+
+model User {
+  id               String              @id @default(cuid())
+  name             String
+  email            String              @unique
+  passwordHash     String
+  role             Role
+  schoolId         String
+  school           School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdAt        DateTime            @default(now())
+  studentProfile   StudentProfile?
+  teacherProfile   TeacherProfile?
+  taughtLessons    Lesson[]
+  attempts         AssessmentAttempt[]
+  conversations    AIConversation[]
+  notifications    Notification[]
+  achievements     Achievement[]
+  revisionSessions RevisionSession[]
+
+  @@index([schoolId, role])
+}
+
+model StudentProfile {
+  id          String                @id @default(cuid())
+  userId      String                @unique
+  grade       Int                   @default(7)
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollments Enrollment[]
+  masteries   StudentTopicMastery[]
+}
+
+model TeacherProfile {
+  id      String  @id @default(cuid())
+  userId  String  @unique
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classes Class[]
+}
+
+model Class {
+  id          String          @id @default(cuid())
+  name        String
+  grade       Int
+  schoolId    String
+  teacherId   String?
+  school      School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher     TeacherProfile? @relation(fields: [teacherId], references: [id])
+  enrollments Enrollment[]
+  lessons     Lesson[]
+
+  @@index([schoolId])
+}
+
+model Subject {
+  id       String   @id @default(cuid())
+  name     String
+  schoolId String
+  school   School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  lessons  Lesson[]
+  topics   Topic[]
+
+  @@unique([schoolId, name])
+}
+
+model Enrollment {
+  id        String         @id @default(cuid())
+  studentId String
+  classId   String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class     Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, classId])
+}
+
+model Lesson {
+  id                String             @id @default(cuid())
+  title             String
+  description       String
+  objectives        String[]
+  content           String
+  published         Boolean            @default(false)
+  scheduledAt       DateTime           @default(now())
+  subjectId         String
+  classId           String
+  teacherId         String
+  subject           Subject            @relation(fields: [subjectId], references: [id])
+  class             Class              @relation(fields: [classId], references: [id])
+  teacher           User               @relation(fields: [teacherId], references: [id])
+  materials         LessonMaterial[]
+  analysis          LessonAnalysis?
+  topics            Topic[]
+  assessments       Assessment[]
+  revisionMaterials RevisionMaterial[]
+
+  @@index([classId, scheduledAt])
+}
+
+model LessonMaterial {
+  id       String @id @default(cuid())
+  name     String
+  kind     String
+  url      String
+  lessonId String
+  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+}
+
+model LessonAnalysis {
+  id              String   @id @default(cuid())
+  concepts        String[]
+  objectives      String[]
+  terms           String[]
+  subtopics       String[]
+  difficulty      String
+  confusions      String[]
+  assessmentAreas String[]
+  lessonId        String   @unique
+  lesson          Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+}
+
+model Topic {
+  id                String                @id @default(cuid())
+  name              String
+  subjectId         String
+  lessonId          String?
+  subject           Subject               @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  lesson            Lesson?               @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  subtopics         Subtopic[]
+  questions         Question[]
+  masteries         StudentTopicMastery[]
+  revisionMaterials RevisionMaterial[]
+  examTopics        ExamTopic[]
+
+  @@index([subjectId])
+}
+
+model Subtopic {
+  id        String     @id @default(cuid())
+  name      String
+  topicId   String
+  topic     Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  questions Question[]
+}
+
+model Question {
+  id                  String               @id @default(cuid())
+  prompt              String
+  type                QuestionType         @default(MULTIPLE_CHOICE)
+  options             String[]
+  answer              String
+  explanation         String
+  difficulty          Difficulty           @default(MEDIUM)
+  approved            Boolean              @default(false)
+  topicId             String
+  subtopicId          String?
+  topic               Topic                @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  subtopic            Subtopic?            @relation(fields: [subtopicId], references: [id])
+  assessmentQuestions AssessmentQuestion[]
+  answers             StudentAnswer[]
+}
+
+model Assessment {
+  id         String               @id @default(cuid())
+  title      String
+  status     AssessmentStatus     @default(DRAFT)
+  timeLimit  Int?
+  retestOfId String?
+  lessonId   String
+  lesson     Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questions  AssessmentQuestion[]
+  attempts   AssessmentAttempt[]
+  createdAt  DateTime             @default(now())
+
+  @@index([status, lessonId])
+}
+
+model AssessmentQuestion {
+  id           String     @id @default(cuid())
+  assessmentId String
+  questionId   String
+  order        Int
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  question     Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, questionId])
+}
+
+model AssessmentAttempt {
+  id           String          @id @default(cuid())
+  userId       String
+  assessmentId String
+  status       AttemptStatus   @default(IN_PROGRESS)
+  score        Float?
+  mastery      Float?
+  startedAt    DateTime        @default(now())
+  submittedAt  DateTime?
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assessment   Assessment      @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  answers      StudentAnswer[]
+
+  @@index([userId, submittedAt])
+}
+
+model StudentAnswer {
+  id         String            @id @default(cuid())
+  attemptId  String
+  questionId String
+  answer     String
+  correct    Boolean           @default(false)
+  attempt    AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question   Question          @relation(fields: [questionId], references: [id])
+
+  @@unique([attemptId, questionId])
+}
+
+model StudentTopicMastery {
+  id         String         @id @default(cuid())
+  studentId  String
+  topicId    String
+  mastery    Float
+  status     MasteryStatus
+  recordedAt DateTime       @default(now())
+  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  topic      Topic          @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, topicId, recordedAt])
+}
+
+model RevisionMaterial {
+  id       String  @id @default(cuid())
+  title    String
+  kind     String
+  url      String
+  topicId  String
+  lessonId String?
+  topic    Topic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+}
+
+model RevisionSession {
+  id          String   @id @default(cuid())
+  userId      String
+  topicId     String
+  completedAt DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Exam {
+  id          String      @id @default(cuid())
+  title       String
+  scheduledAt DateTime
+  schoolId    String
+  topics      ExamTopic[]
+}
+
+model ExamTopic {
+  id      String @id @default(cuid())
+  examId  String
+  topicId String
+  exam    Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, topicId])
+}
+
+model AIConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Achievement {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  awardedAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

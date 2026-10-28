@@ -1,0 +1,19 @@
+export type LessonInsight = { concepts: string[]; objectives: string[]; terms: string[]; subtopics: string[]; difficulty: string; confusions: string[]; assessmentAreas: string[] };
+export function analyzeLesson(content: string, objectives: string[] = []): LessonInsight {
+ const clean = content.replace(/\s+/g," ").trim();
+ const words = clean.match(/[\p{L}][\p{L}'-]{4,}/gu) ?? [];
+ const counts = new Map<string,number>();
+ for(const word of words){const key=word.toLocaleLowerCase();if(!["which","their","there","these","those","where","when","while","about","because","through","helps","other","between","single","several","should","would","could","every","after","before","within","without","across","using","based","first","second","third"].includes(key))counts.set(key,(counts.get(key)??0)+1)}
+ const terms=[...counts].sort((a,b)=>b[1]-a[1]).slice(0,5).map(([word])=>word[0].toUpperCase()+word.slice(1));
+ const chunks=clean.split(/[.!?]+/).map(x=>x.trim()).filter(x=>x.length>25);
+ const concepts=(terms.length?terms.slice(0,3):["Key idea", "Evidence", "Application"]);
+ return {concepts,objectives:objectives.length?objectives.slice(0,6):["Explain the central ideas in your own words","Apply the lesson ideas to a new example","Support an explanation with relevant evidence"],terms,subtopics:chunks.slice(0,4).map(x=>x.split(" ").slice(0,7).join(" ")),difficulty:words.length>250?"ADVANCED":words.length>100?"INTERMEDIATE":"FOUNDATIONAL",confusions:[`Confusing ${terms[0]?.toLowerCase()??"a key concept"} with an example rather than the underlying idea`,`Making a conclusion without checking it against the lesson evidence`],assessmentAreas:["Explain a central concept","Apply an idea to a fresh situation","Select evidence that supports a claim"]};
+}
+export function generateAssessment(content: string, topicName: string, count=5) {
+ const insight=analyzeLesson(content);const terms=insight.terms;const items=[] as {prompt:string;options:string[];answer:string;explanation:string;term:string}[];
+ for(let i=0;i<count;i++){const term=terms[i%Math.max(terms.length,1)]??topicName;const correct=`A lesson-supported explanation of ${term.toLowerCase()}`;items.push({prompt:i%2===0?`Which response best applies the lesson's idea of ${term.toLowerCase()}?`:`What is the most useful way to evaluate an explanation about ${term.toLowerCase()}?`,options:[correct,"An answer selected without checking the lesson","A detail that does not connect to the question","A guess based only on familiarity"],answer:correct,explanation:`The lesson supports checking ${term.toLowerCase()} against its concepts and evidence.`,term})}
+ return items;
+}
+export function analyzePerformance(score:number, topic:string){return {strengths:score>=75?[`You showed a strong grasp of ${topic}.`]:["You completed the assessment and identified ideas to build on."],weakAreas:score<80?[topic]:[],knowledgeGaps:score<55?[`Review how ${topic} connects to the examples in the lesson.`]:[],recommendedRevision:score<80?`Review the lesson notes for ${topic}, then retry with a fresh set of questions.`:"Your current results suggest this topic is ready for a new challenge."}}
+export function estimateMastery(current:number, previous:number[], difficulty:number[]=[]){const recent=previous.slice(-3);const weight=Math.max(.1,Math.min(.4,recent.length*.1));const historical=recent.length?recent.reduce((a,b)=>a+b,0)/recent.length:current;const difficultyAdjustment=difficulty.length?(difficulty.reduce((a,b)=>a+b,0)/difficulty.length-1)*3:0;return Math.max(0,Math.min(100,Math.round(current*(1-weight)+historical*weight+difficultyAdjustment)))}
+export function planRevision(topic:string, materials:string[]){return {topic,steps:[`Review the main idea behind ${topic}`,"Work through one example from the lesson","Explain the idea in your own words","Try a short practice check"],materials}}

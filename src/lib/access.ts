@@ -1,0 +1,4 @@
+import type { SessionUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+export async function canAccessLesson(user:SessionUser,lessonId:string){const lesson=await prisma.lesson.findUnique({where:{id:lessonId},select:{teacherId:true,classId:true,published:true}});if(!lesson)return false;if(user.role==="ADMIN")return true;if(user.role==="TEACHER")return lesson.teacherId===user.id;if(!lesson.published)return false;return Boolean(await prisma.enrollment.findFirst({where:{classId:lesson.classId,student:{userId:user.id}},select:{id:true}}))}
+export async function canTeachSchool(user:SessionUser,schoolId:string){if(user.role==="ADMIN")return Boolean(await prisma.user.findFirst({where:{id:user.id,schoolId},select:{id:true}}));return user.role==="TEACHER"&&Boolean(await prisma.user.findFirst({where:{id:user.id,schoolId},select:{id:true}}))}
